@@ -1,92 +1,129 @@
-import json from 'rollup-plugin-json';
-import resolve from 'rollup-plugin-node-resolve';
-import commonjs from 'rollup-plugin-commonjs';
 import babel from 'rollup-plugin-babel';
 import bundleSize from 'rollup-plugin-bundle-size';
-import builtins from 'rollup-plugin-node-builtins';
-import autoExternal from 'rollup-plugin-auto-external';
-import cleanup from 'rollup-plugin-cleanup';
-import minify from 'rollup-plugin-babel-minify';
-import globals from 'rollup-plugin-node-globals';
+import commonjs from 'rollup-plugin-commonjs';
+import json from 'rollup-plugin-json';
+import nodeResolve from 'rollup-plugin-node-resolve';
+import replace from 'rollup-plugin-replace';
+import { terser } from 'rollup-plugin-terser';
 
-module.exports = [
+import pkg from './package.json';
+
+const extensions = ['.js'];
+const babelRuntimeVersion = pkg.dependencies['@babel/runtime'].replace(/^[^0-9]*/, '');
+
+const makeExternalPredicate = externalArr => {
+  if (externalArr.length === 0) {
+    return () => false;
+  }
+  const pattern = new RegExp(`^(${externalArr.join('|')})($|/)`);
+  return id => pattern.test(id);
+};
+
+export default [
+  // CommonJS
   {
     input: 'src/index.js',
     output: {
-      file: 'dist/build.esm.js',
-      format: 'es'
+      file: 'dist/multicall.cjs.js',
+      format: 'cjs',
+      indent: false,
+      sourcemap: true
     },
-    external: ['cross-fetch', 'debug', 'ethers', 'isomorphic-ws', 'lodash', 'ws'],
+    external: makeExternalPredicate([
+      ...Object.keys(pkg.dependencies || {}),
+      ...Object.keys(pkg.peerDependencies || {})
+    ]),
     plugins: [
-      builtins(),
-      babel({
-        runtimeHelpers: true,
-        exclude: 'node_modules/**'
-      }),
       json(),
-      cleanup(),
-      resolve({
-        browser: true
+      nodeResolve({ extensions }),
+      babel({
+        extensions,
+        plugins: [['@babel/plugin-transform-runtime', { version: babelRuntimeVersion }]],
+        runtimeHelpers: true
       }),
-      commonjs({
-        namedExports: {
-          'node_modules/js-sha3/src/sha3.js': ['keccak256']
-        }
-      }),
-      bundleSize(),
-      minify()
+      bundleSize()
     ]
   },
+
+  // ESM
   {
     input: 'src/index.js',
     output: {
-      file: 'dist/build.cjs.js',
-      format: 'cjs'
+      file: 'dist/multicall.esm.js',
+      format: 'es',
+      indent: false,
+      sourcemap: true
     },
+    external: makeExternalPredicate([
+      ...Object.keys(pkg.dependencies || {}),
+      ...Object.keys(pkg.peerDependencies || {})
+    ]),
     plugins: [
-      builtins(),
-      babel({
-        runtimeHelpers: true,
-        exclude: 'node_modules/**'
-      }),
       json(),
-      autoExternal(),
-      cleanup(),
-      resolve(),
-      commonjs({
-        namedExports: {
-          'node_modules/js-sha3/src/sha3.js': ['keccak256']
-        }
+      nodeResolve({ extensions }),
+      babel({
+        extensions,
+        plugins: [
+          ['@babel/plugin-transform-runtime', { version: babelRuntimeVersion, useESModules: true }]
+        ],
+        runtimeHelpers: true
       }),
-      bundleSize(),
-      minify()
+      bundleSize()
     ]
   },
+
+  // ESM for Browsers
   {
     input: 'src/index.js',
     output: {
-      file: 'dist/build.umd.js',
+      file: 'dist/multicall.esm.mjs',
+      format: 'es',
+      indent: false,
+      sourcemap: true
+    },
+    plugins: [
+      json(),
+      nodeResolve({ extensions, browser: true }),
+      commonjs(),
+      replace({ 'process.env.NODE_ENV': JSON.stringify('production') }),
+      babel({ extensions, exclude: 'node_modules/**' }),
+      terser({
+        compress: {
+          pure_getters: true,
+          unsafe: true,
+          unsafe_comps: true,
+          warnings: false
+        }
+      }),
+      bundleSize()
+    ]
+  },
+
+  // UMD
+  {
+    input: 'src/index.js',
+    output: {
+      file: 'dist/multicall.umd.js',
+      format: 'umd',
       name: 'Multicall',
-      format: 'umd'
+      indent: false,
+      sourcemap: true
     },
     plugins: [
-      babel({
-        runtimeHelpers: true,
-        exclude: 'node_modules/**'
-      }),
       json(),
-      cleanup(),
-      resolve({
-        browser: true
-      }),
-      commonjs({
-        namedExports: {
-          'node_modules/js-sha3/src/sha3.js': ['keccak256']
+      nodeResolve({ extensions, browser: true }),
+      commonjs(),
+      babel({ extensions, exclude: 'node_modules/**' }),
+      replace({ 'process.env.NODE_ENV': JSON.stringify('production') }),
+      terser({
+        compress: {
+          pure_getters: true,
+          unsafe: true,
+          unsafe_comps: true,
+          warnings: false
         }
       }),
-      globals(),
-      bundleSize(),
-      minify()
+      bundleSize()
     ]
   }
 ];
