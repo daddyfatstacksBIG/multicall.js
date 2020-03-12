@@ -1,32 +1,34 @@
 import WS from 'jest-websocket-mock';
-import {createWatcher} from '../src';
-import {calls, mockedResults} from './shared';
+import { createWatcher } from '../src';
+import { calls, mockedResults } from './shared';
 
 const config = {
-  rpcUrl : 'wss://mocked',
-  multicallAddress : '0x1234567890123456789012345678901234567890'
+  rpcUrl: 'wss://mocked',
+  multicallAddress: '0x1234567890123456789012345678901234567890'
 };
 
 describe('websocket', () => {
   beforeAll(async () => {
-    const server = new WS('wss://mocked', {jsonProtocol : true});
+    const server = new WS('wss://mocked', { jsonProtocol: true });
     server.on('connection', socket => {
       socket.on('message', data => {
         const json = JSON.parse(data);
-        socket.send(JSON.stringify({
-          jsonrpc : '2.0',
-          id : json.id,
-          result : mockedResults[json.id - 1]
-        }));
+        socket.send(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: json.id,
+            result: mockedResults[json.id - 1]
+          })
+        );
       });
     });
   });
 
   test('requests using websocket endpoint', async () => {
     const results = {};
-    const watcher = createWatcher([ calls[0], calls[1] ], config);
-    watcher.subscribe(update => results[update.type] = update.value);
-    watcher.onNewBlock(number => results['BLOCK_NUMBER'] = number);
+    const watcher = createWatcher([calls[0], calls[1]], config);
+    watcher.subscribe(update => (results[update.type] = update.value));
+    watcher.onNewBlock(number => (results['BLOCK_NUMBER'] = number));
 
     await watcher.start();
 
